@@ -116,9 +116,9 @@ object CrosswordSolver extends App {
   }
 
   // generate a list of probable words that could sit on a site
-  def genProbables(wordsList: List[List[Char]], site: List[Char], filled: List[List[Char]]): List[List[Char]] = {
-    ((wordsList filter (x => if (x.length == site.length) true else false))
-      filter (y => compareWordnSite(y, site))) filterNot (z => filled contains z)
+  def genProbables(wordsList: List[List[Char]], site: List[Char]): List[List[Char]] = {
+    ((wordsList filter (x => x.length == site.length))
+      filter (y => compareWordnSite(y, site))) //filterNot (z => filled contains z)
   }
 
   // check if we got a solution for the crossword
@@ -127,42 +127,61 @@ object CrosswordSolver extends App {
     else true
   }  
   
+  // counts the filled chars in a word, maybe we can sort words by filled chars? not used now
+  def countFilledChars(s: List[Char], agg:Int):Int = s match {
+    case x :: xy => if (x != '*') countFilledChars(xy, agg+1) else countFilledChars(xy, agg)
+    case List() => agg    
+  }
+  
   // the main recursive function which solves
-  def solveCrossword(tempSites: List[Char], filled: List[List[Char]]): List[Char] = {
-    if (checkCrosswordComplete(tempSites))
-      return tempSites
-
-    val horiSites = splitByWidth(width)(tempSites)
-    val wordSites = (genWordSites(horiSites, 0) map (x => (true, x))) :::
-      (genWordSites(rotate2DArray90(horiSites), 0) map (x => (false, x)))
-
-    for (wordSite <- wordSites) {
-      val probables = genProbables(wordsList, wordSite._2._3, filled)
-      for (probable <- probables) {
+  def solveCrossword(width: Int, wordsList: List[List[Char]], horiSites: List[List[Char]], filled: List[List[Char]]): List[Char] = {
+    if (checkCrosswordComplete(horiSites.flatten))       
+      return horiSites.flatten   
+    
+    // i know that this is helping improve performance, is it also slowing it down?
+    val wordSites = ((((genWordSites(horiSites, 0) map (x => (true, x))) ::: 
+        (genWordSites(rotate2DArray90(horiSites), 0) map (x => (false, x)))) filterNot (w => filled contains w._2._3)) 
+        sortBy (w => w._2._3.length)) reverse
+        
+    for (wordSite <- wordSites) {      
+      for (probable <- genProbables(wordsList, wordSite._2._3)) {
+        // true - for vertical wordsites
         if (wordSite._1) {
-          val pSolution = solveCrossword(putWordOnSite(0, probable, 
-              wordSite._2, horiSites).flatten, probable :: filled)
+          val pSolution = solveCrossword(width, wordsList filterNot (w => w == probable), putWordOnSite(0, probable, 
+              wordSite._2, horiSites), probable :: filled)
           if (checkCrosswordComplete(pSolution))
             return pSolution
 
-        } else {
-          val pSolution = solveCrossword(rotate2DArray270(putWordOnSite(0, probable, wordSite._2,
-            rotate2DArray90(horiSites))).flatten, probable :: filled)
+        } 
+        // false - for horizontal wordsites
+        else {
+          val pSolution = solveCrossword(width, wordsList filterNot (w => w == probable), rotate2DArray270(putWordOnSite(0, probable, wordSite._2,
+            rotate2DArray90(horiSites))), probable :: filled)
           if (checkCrosswordComplete(pSolution))
             return pSolution
         }
       }
     }
-
+    // return empty when no solution
     List()
   }
   
-  def words = "LINUX  PROLOG PERL ONLINE GNU XML NFS SQL EMACS WEB MAC"
+  def words = "LINUX  PROLOG PERL ONLINE GNU XML NFS SQL EMACS WEB MAC"  
   def sites = "......  .. .  .  .. ..... .. . . ...  . ... . ...     "
-  def width = 9  
-  def wordsList = split(words.toList)
+  println(sites.length)
   
-  val solution = solveCrossword(sites.toList map (x => if (x == '.') '*' else x), List())
+  def width = 9
+  
+  
+  def wordsList = split(words.toList)  sortBy (w => w.length) reverse
+  val horiSites = splitByWidth(width)(sites.toList map (x => if (x == '.') '*' else x))
+  println(wordsList)
+  
+  val t0 = System.currentTimeMillis()
+  val solution = solveCrossword(width, wordsList, horiSites, List())
+  val t1 = System.currentTimeMillis()
+  
+  println("Elapsed time: " + (t1 - t0) + "ms")
   println(sites)
   println(solution)
 
